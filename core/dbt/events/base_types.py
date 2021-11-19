@@ -83,7 +83,6 @@ class Event(metaclass=ABCMeta):
         return self.pid
 
 
-
 class File(Event, metaclass=ABCMeta):
     # Solely the human readable message. Timestamps and formatting will be added by the logger.
     def file_msg(self) -> str:
