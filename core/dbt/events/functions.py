@@ -137,15 +137,6 @@ def create_text_log_line(e: T_Event, msg_fn: Callable[[T_Event], str]) -> str:
     return log_line
 
 
-# classes and sets are returned that cannot be natively encoded to json
-def set_default(obj):
-    if hasattr(obj, '__dict__'):
-        return obj.__dict__
-    if isinstance(obj, set):
-        return list(obj)
-    return str(obj)
-
-
 # translates an Event to a completely formatted json log line
 # you have to specify which message you want. (i.e. - e.message, e.cli_msg(), e.file_msg())
 def create_json_log_line(e: T_Event, msg_fn: Callable[[T_Event], str]) -> str:
@@ -159,11 +150,22 @@ def create_json_log_line(e: T_Event, msg_fn: Callable[[T_Event], str]) -> str:
         }
     else:
         values['data'] = None
-    log_line = json.dumps(
-        {k: scrub_secrets(v, env_secrets()) for (k, v) in values.items()},
-        default=lambda x: set_default(x),
-        sort_keys=True
-    )
+
+    # need to catch if any data is not serializable but still make sure as much of
+    # the logs go out as possible
+    try:
+        log_line = json.dumps(
+            {k: scrub_secrets(v, env_secrets()) for (k, v) in values.items()},
+            sort_keys=True
+        )
+    except TypeError:
+        # the only key currently throwing errors is 'data'.  Expand this list
+        # as needed if new issues pop up
+        safe_values = {k: v for (k, v) in values.items() if k not in ('data')}
+        log_line = json.dumps(
+            {k: scrub_secrets(v, env_secrets()) for (k, v) in safe_values.items()},
+            sort_keys=True
+        )
     return log_line
 
 
