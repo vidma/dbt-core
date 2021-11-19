@@ -14,7 +14,7 @@ import logging
 from logging import Logger
 from logging.handlers import RotatingFileHandler
 import os
-from typing import Callable, List, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 from dataclasses import _FIELD_BASE  # type: ignore[attr-defined]
 
 
@@ -121,7 +121,9 @@ def event_to_dict(e: T_Event, msg_fn: Callable[[T_Event], str]) -> dict:
         'ts': e.get_ts(),
         'pid': e.get_pid(),
         'msg': msg_fn(e),
-        'level': level
+        'level': level,
+        'data': Optional[Dict[str, Any]],
+        'event_data_serialized': True
     }
 
 
@@ -161,9 +163,10 @@ def create_json_log_line(e: T_Event, msg_fn: Callable[[T_Event], str]) -> str:
     except TypeError:
         # the only key currently throwing errors is 'data'.  Expand this list
         # as needed if new issues pop up
-        safe_values = {k: v for (k, v) in values.items() if k not in ('data')}
+        values['data'] = None
+        values['event_data_serialized'] = False
         log_line = json.dumps(
-            {k: scrub_secrets(v, env_secrets()) for (k, v) in safe_values.items()},
+            {k: scrub_secrets(v, env_secrets()) for (k, v) in values.items()},
             sort_keys=True
         )
     return log_line
