@@ -355,23 +355,23 @@ class DBTIntegrationTest(unittest.TestCase):
             msg = f"Could not clean up after test - {self.test_root_dir} not removable"
             fire_event(IntegrationTestException(msg=msg))
 
-    def _get_schema_fqn(self, database, schema):
+    def _get_schema_fqn(self, schema):
         schema_fqn = self.quote_as_configured(schema, 'schema')
         return schema_fqn
 
-    def _create_schema_named(self, database, schema):
-        schema_fqn = self._get_schema_fqn(database, schema)
+    def _create_schema_named(self, schema):
+        schema_fqn = self._get_schema_fqn(schema)
         self.run_sql(self.CREATE_SCHEMA_STATEMENT.format(schema_fqn))
         self._created_schemas.add(schema_fqn)
 
-    def _drop_schema_named(self, database, schema):
-        schema_fqn = self._get_schema_fqn(database, schema)
+    def _drop_schema_named(self, schema):
+        schema_fqn = self._get_schema_fqn(schema)
         self.run_sql(self.DROP_SCHEMA_STATEMENT.format(schema_fqn))
 
     def _create_schemas(self):
         schema = self.unique_schema()
         with self.adapter.connection_named('__test'):
-            self._create_schema_named(self.default_database, schema)
+            self._create_schema_named(schema)
 
     def _drop_schemas_adapter(self):
         schema = self.unique_schema()
@@ -380,7 +380,7 @@ class DBTIntegrationTest(unittest.TestCase):
         schema = self.unique_schema()
         # we always want to drop these if necessary, we'll clear it soon.
         self._created_schemas.add(
-            self._get_schema_fqn(self.default_database, schema)
+            self._get_schema_fqn(schema)
         )
 
         for schema_fqn in self._created_schemas:
