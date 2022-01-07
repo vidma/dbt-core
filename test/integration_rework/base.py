@@ -195,15 +195,6 @@ class DBTIntegrationTest(unittest.TestCase):
             raise ValueError('invalid adapter type {}'.format(adapter_type))
 
 
-    def _symlink_test_folders(self):
-        for entry in os.listdir(self.test_original_source_path):
-            src = os.path.join(self.test_original_source_path, entry)
-            tst = os.path.join(self.test_root_dir, entry)
-            if os.path.isdir(src) or src.endswith('.sql'):
-                # symlink all sql files and all directories.
-                os.symlink(src, tst)
-        os.symlink(self._logs_dir, os.path.join(self.test_root_dir, 'logs'))
-
     @property
     def test_root_realpath(self):
         if sys.platform == 'darwin':
@@ -228,8 +219,12 @@ class DBTIntegrationTest(unittest.TestCase):
 
         os.chdir(self.test_root_dir)
         try:
-            # TODO: emily - create files from test function
-            self._symlink_test_folders()
+            os.mkdir(os.path.join(self.test_root_dir, 'models'))
+            os.mkdir(os.path.join(self.test_root_dir, 'analyses'))
+            os.mkdir(os.path.join(self.test_root_dir, 'tests'))
+            os.mkdir(os.path.join(self.test_root_dir, 'seeds'))
+            os.mkdir(os.path.join(self.test_root_dir, 'macros'))
+            os.mkdir(os.path.join(self.test_root_dir, 'snapshots'))
         except Exception as exc:
             msg = '\n\t'.join((
                 'Failed to symlink test folders!',
@@ -262,8 +257,12 @@ class DBTIntegrationTest(unittest.TestCase):
             'name': 'test',
             'version': '1.0',
             'config-version': 2,
-            'test-paths': [],
-            'model-paths': [self.models],
+            'model-paths': ["models"],
+            'analysis-paths': ["analyses"],
+            'test-paths': ["tests"],
+            'seed-paths': ["seeds"],
+            'macro-paths': ["macros"],
+            'snapshot-paths': ["snapshots"],
             'profile': 'test',
         }
 

@@ -17,7 +17,7 @@ class BaseTestSimpleCopy(DBTIntegrationTest):
     @property
     def models(self):
         return self.dir("models")
-
+    
     @property
     def project_config(self):
         return self.seed_quote_cfg_with({
@@ -33,24 +33,151 @@ class BaseTestSimpleCopy(DBTIntegrationTest):
         }
         cfg.update(extra)
         return cfg
-
+    
 
 class TestSimpleCopy(BaseTestSimpleCopy):
 
-    @property
-    def project_config(self):
-        return self.seed_quote_cfg_with({"seed-paths": [self.dir("seed-initial")]})
+    def seed_files(self, data):
+        with open("seeds/seed.csv", "w") as f:
+            f.write(data)
+    
+    def models(self, data):
+        for k, v in data.items():
+            with open(f"models/{k}.sql", "w") as f:
+                f.write(v)
+
+    def seed_data(self):
+        seed = {}
+        seed['initial'] = """id,first_name,last_name,email,gender,ip_address
+        1,Jack,Hunter,jhunter0@pbs.org,Male,59.80.20.168
+        2,Kathryn,Walker,kwalker1@ezinearticles.com,Female,194.121.179.35
+        3,Gerald,Ryan,gryan2@com.com,Male,11.3.212.243
+        """
+        seed['updated']  = """id,first_name,last_name,email,gender,ip_address
+        1,Jack,Hunter,jhunter0@pbs.org,Male,59.80.20.168
+        2,Kathryn,Walker,kwalker1@ezinearticles.com,Female,194.121.179.35
+        3,Gerald,Ryan,gryan2@com.com,Male,11.3.212.243
+        4,Bonnie,Spencer,bspencer3@ameblo.jp,Female,216.32.196.175
+        5,Harold,Taylor,htaylor4@people.com.cn,Male,253.10.246.136
+        """
+        return seed
+    
+    def model_data(self):
+        model = {}
+
+        model['view_model'] = """
+            {{
+            config(
+                materialized = "view"
+            )
+            }}
+            select * from {{ ref('seed') }}
+            """
+    
+        model['incremental'] = """
+            {{
+            config(
+                materialized = "incremental"
+            )
+            }}
+            select * from {{ ref('seed') }}
+            {% if is_incremental() %}
+                where id > (select max(id) from {{this}})
+            {% endif %}
+            """
+        
+        model['materialized'] = """
+            {{
+            config(
+                materialized = "table"
+            )
+            }}
+            -- ensure that dbt_utils' relation check will work
+            {% set relation = ref('seed') %}
+            {%- if not (relation is mapping and relation.get('metadata', {}).get('type', '').endswith('Relation')) -%}
+                {%- do exceptions.raise_compiler_error("Macro " ~ macro ~ " expected a Relation but received the value: " ~ relation) -%}
+            {%- endif -%}
+            -- this is a unicode character: å
+            select * from {{ relation }}
+            """
+        
+        model['get_and_ref'] = """
+            {%- do adapter.get_relation(database=target.database, schema=target.schema, identifier='materialized') -%}
+
+            select * from {{ ref('materialized') }}
+            """
+        
+        model['interleavened_sort'] = """
+        {{
+        config(
+            materialized = "table",
+            sort = ['first_name', 'last_name'],
+            sort_type = 'interleaved'
+        )
+        }}
+        select * from {{ ref('seed') }}
+        """
+
+        model['compound_sort'] = """
+        {{
+        config(
+            materialized = "table",
+            sort = 'first_name',
+            sort_type = 'compound'
+        )
+        }}
+
+        select * from {{ ref('seed') }}
+        """
+
+        model['advanced_incremental'] = """
+        {{
+            config(
+                materialized = "incremental",
+                unique_key = "id",
+                persist_docs = {"relation": true}
+            )
+        }}
+
+        select * from {{ ref('seed') }}
+
+        {% if is_incremental() %}
+            where id > (select max(id) from {{this}})
+        {% endif %}
+        """
+
+        model['disabled'] = """
+        {{
+        config(
+            materialized = "view",
+            enabled = False
+        )
+        }}
+
+        select * from {{ ref('seed') }}
+        """
+
+        model['empty'] = ""
+
+
+
+        return model
 
     @pytest.mark.use_profile.with_args(profile="postgres")
     def test__simple_copy(self):
+        seed_files = self.seed_data()
+        self.models(self.model_data())
+
+        self.seed_files(seed_files['initial'])
         results = self.run_dbt(["seed"])
+        # breakpoint()
         self.assertEqual(len(results),  1)
         results = self.run_dbt()
         self.assertEqual(len(results),  7)
 
         self.assertManyTablesEqual(["seed", "view_model", "incremental", "materialized", "get_and_ref"])
-
-        self.use_default_project({"seed-paths": [self.dir("seed-update")]})
+        
+        self.seed_files(seed_files['updated'])
         results = self.run_dbt(["seed"])
         self.assertEqual(len(results), 1)
         results = self.run_dbt()
