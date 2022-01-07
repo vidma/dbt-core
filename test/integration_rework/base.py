@@ -88,23 +88,6 @@ class TestArgs:
         self.__dict__.update(kwargs)
 
 
-def _profile_from_test_name(test_name):
-    adapter_names = ('postgres', 'presto')
-    adapters_in_name = sum(x in test_name for x in adapter_names)
-    if adapters_in_name != 1:
-        raise ValueError(
-            'test names must have exactly 1 profile choice embedded, {} has {}'
-            .format(test_name, adapters_in_name)
-        )
-
-    for adapter_name in adapter_names:
-        if adapter_name in test_name:
-            return adapter_name
-
-    raise ValueError(
-        'could not find adapter name in test name {}'.format(test_name)
-    )
-
 
 def _pytest_test_name():
     return os.environ['PYTEST_CURRENT_TEST'].split()[0]
@@ -151,6 +134,7 @@ class DBTIntegrationTest(unittest.TestCase):
     def database_host(self):
         return os.getenv('POSTGRES_TEST_HOST', 'localhost')
 
+    # this would need to be defined per adapter still
     def postgres_profile(self):
         return {
             'config': {
@@ -196,16 +180,11 @@ class DBTIntegrationTest(unittest.TestCase):
 
         to_return = "{}_{}".format(self.prefix, schema)
 
-        if self.adapter_type == 'snowflake':
-            return to_return.upper()
-
         return to_return.lower()
 
     @property
     def default_database(self):
         database = self.config.credentials.database
-        if self.adapter_type == 'snowflake':
-            return database.upper()
         return database
 
     @property
@@ -215,13 +194,9 @@ class DBTIntegrationTest(unittest.TestCase):
     def get_profile(self, adapter_type):
         if adapter_type == 'postgres':
             return self.postgres_profile()
-        elif adapter_type == 'presto':
-            return self.presto_profile()
         else:
             raise ValueError('invalid adapter type {}'.format(adapter_type))
 
-    def _pick_profile(self):
-        return 'postgres'
 
     def _symlink_test_folders(self):
         for entry in os.listdir(self.test_original_source_path):
@@ -277,12 +252,13 @@ class DBTIntegrationTest(unittest.TestCase):
         reset_deprecations()
         template_cache.clear()
 
-        self.use_profile(self._pick_profile())
+        self.use_profile()
         self.use_default_project()
         self.set_packages()
         self.set_selectors()
         self.load_config()
 
+    # sets up a basic project.  can pass in overrides ie {"seed-paths": [self.dir("seed-update")]}
     def use_default_project(self, overrides=None):
         # create a dbt_project.yml
         base_project_config = {
@@ -302,11 +278,12 @@ class DBTIntegrationTest(unittest.TestCase):
         with open("dbt_project.yml", 'w') as f:
             yaml.safe_dump(project_config, f, default_flow_style=True)
 
-    def use_profile(self, adapter_type):
-        self.adapter_type = adapter_type
+    def use_profile(self):
+        # pretty sure there's a cleaner way of this
+        self.adapter_type = self.test__simple_copy.pytestmark[0].kwargs['profile']
 
         profile_config = {}
-        default_profile_config = self.get_profile(adapter_type)
+        default_profile_config = self.get_profile(self.adapter_type)
 
         profile_config.update(default_profile_config)
         profile_config.update(self.profile_config)
@@ -380,9 +357,6 @@ class DBTIntegrationTest(unittest.TestCase):
 
     def _get_schema_fqn(self, database, schema):
         schema_fqn = self.quote_as_configured(schema, 'schema')
-        if self.adapter_type == 'snowflake':
-            database = self.quote_as_configured(database, 'database')
-            schema_fqn = '{}.{}'.format(database, schema_fqn)
         return schema_fqn
 
     def _create_schema_named(self, database, schema):
@@ -391,26 +365,16 @@ class DBTIntegrationTest(unittest.TestCase):
         self._created_schemas.add(schema_fqn)
 
     def _drop_schema_named(self, database, schema):
-        if self.adapter_type == 'presto':
-            relation = self.adapter.Relation.create(database=database, schema=schema)
-            self.adapter.drop_schema(relation)
-        else:
-            schema_fqn = self._get_schema_fqn(database, schema)
-            self.run_sql(self.DROP_SCHEMA_STATEMENT.format(schema_fqn))
+        schema_fqn = self._get_schema_fqn(database, schema)
+        self.run_sql(self.DROP_SCHEMA_STATEMENT.format(schema_fqn))
 
     def _create_schemas(self):
         schema = self.unique_schema()
         with self.adapter.connection_named('__test'):
             self._create_schema_named(self.default_database, schema)
-            if self.setup_alternate_db and self.adapter_type == 'snowflake':
-                self._create_schema_named(self.alternative_database, schema)
 
     def _drop_schemas_adapter(self):
         schema = self.unique_schema()
-        if self.adapter_type == 'presto':
-            self._drop_schema_named(self.default_database, schema)
-            if self.setup_alternate_db and self.alternative_database:
-                self._drop_schema_named(self.alternative_database, schema)
 
     def _drop_schemas_sql(self):
         schema = self.unique_schema()
@@ -418,16 +382,6 @@ class DBTIntegrationTest(unittest.TestCase):
         self._created_schemas.add(
             self._get_schema_fqn(self.default_database, schema)
         )
-        # on postgres, this will make you sad
-        drop_alternative = (
-            self.setup_alternate_db and
-            self.adapter_type not in {'postgres'} and
-            self.alternative_database
-        )
-        if drop_alternative:
-            self._created_schemas.add(
-                self._get_schema_fqn(self.alternative_database, schema)
-            )
 
         for schema_fqn in self._created_schemas:
             self.run_sql(self.DROP_SCHEMA_STATEMENT.format(schema_fqn))
@@ -436,10 +390,7 @@ class DBTIntegrationTest(unittest.TestCase):
 
     def _drop_schemas(self):
         with self.adapter.connection_named('__test'):
-            if self.adapter_type == 'presto':
-                self._drop_schemas_adapter()
-            else:
-                self._drop_schemas_sql()
+            self._drop_schemas_sql()
 
     @property
     def project_config(self):
@@ -498,9 +449,6 @@ class DBTIntegrationTest(unittest.TestCase):
     # horrible hack to support snowflake for right now
     def transform_sql(self, query, kwargs=None):
         to_return = query
-
-        if self.adapter_type == 'snowflake':
-            to_return = to_return.replace("BIGSERIAL", "BIGINT AUTOINCREMENT")
 
         base_kwargs = {
             'schema': self.unique_schema(),
@@ -567,17 +515,10 @@ class DBTIntegrationTest(unittest.TestCase):
         with self.get_connection(connection_name) as conn:
             msg = f'test connection "{conn.name}" executing: {sql}'
             fire_event(IntegrationTestDebug(msg=msg))
-            if self.adapter_type == 'presto':
-                return self.run_sql_presto(sql, fetch, conn)
-            else:
-                return self.run_sql_common(sql, fetch, conn)
+            return self.run_sql_common(sql, fetch, conn)
 
     def _ilike(self, target, value):
-        # presto has this regex substitution monstrosity instead of 'ilike'
-        if self.adapter_type == 'presto':
-            return r"regexp_like({}, '(?i)\A{}\Z')".format(target, value)
-        else:
-            return "{} ilike '{}'".format(target, value)
+        return "{} ilike '{}'".format(target, value)
 
     def get_many_table_columns_snowflake(self, tables, schema, database=None):
         tables = set(tables)
@@ -587,7 +528,7 @@ class DBTIntegrationTest(unittest.TestCase):
             database=self.quote_as_configured(database, 'database'),
             schema=self.quote_as_configured(schema, 'schema')
         )
-        # assumption: this will be much  faster than doing one query/table
+        # assumption: this will be much faster than doing one query/table
         # because in tests, we'll want most of our tables most of the time.
         columns = self.run_sql(sql, fetch='all')
         results = []
@@ -603,10 +544,7 @@ class DBTIntegrationTest(unittest.TestCase):
         return results
 
     def get_many_table_columns_information_schema(self, tables, schema, database=None):
-        if self.adapter_type == 'presto':
-            columns = 'table_name, column_name, data_type'
-        else:
-            columns = 'table_name, column_name, data_type, character_maximum_length'
+        columns = 'table_name, column_name, data_type, character_maximum_length'
 
         sql = """
                 select {columns}
@@ -635,10 +573,7 @@ class DBTIntegrationTest(unittest.TestCase):
         return list(map(self.filter_many_columns, columns))
 
     def get_many_table_columns(self, tables, schema, database=None):
-        if self.adapter_type == 'snowflake':
-            result = self.get_many_table_columns_snowflake(tables, schema, database)
-        else:
-            result = self.get_many_table_columns_information_schema(tables, schema, database)
+        result = self.get_many_table_columns_information_schema(tables, schema, database)
         result.sort(key=lambda x: '{}.{}'.format(x[0], x[1]))
         return result
 
@@ -648,10 +583,6 @@ class DBTIntegrationTest(unittest.TestCase):
             char_size = None
         else:
             table_name, column_name, data_type, char_size = column
-        # in snowflake, all varchar widths are created equal
-        if self.adapter_type == 'snowflake':
-            if char_size and char_size < 16777216:
-                char_size = 16777216
         return (table_name, column_name, data_type, char_size)
 
     @contextmanager
@@ -699,29 +630,8 @@ class DBTIntegrationTest(unittest.TestCase):
             res[table_name].append(col_def)
         return res
 
-    def get_models_in_schema_snowflake(self, schema):
-        sql = 'show objects in schema {}.{}'.format(
-            self.quote_as_configured(self.default_database, 'database'),
-            self.quote_as_configured(schema, 'schema')
-        )
-        results = {}
-        for row in self.run_sql(sql, fetch='all'):
-            # I sure hope these never change!
-            name = row[1]
-            kind = row[4]
-
-            if kind == 'TABLE':
-                kind = 'table'
-            elif kind == 'VIEW':
-                kind = 'view'
-
-            results[name] = kind
-        return results
-
     def get_models_in_schema(self, schema=None):
         schema = self.unique_schema() if schema is None else schema
-        if self.adapter_type == 'snowflake':
-            return self.get_models_in_schema_snowflake(schema)
 
         sql = """
                 select table_name,
@@ -982,10 +892,6 @@ class DBTIntegrationTest(unittest.TestCase):
                     relation_a, relation_b, a_name, a_type, b_type
                 ))
 
-            if self.adapter_type == 'presto' and None in (a_size, b_size):
-                # None is compatible with any size
-                continue
-
             self.assertEqual(a_size, b_size,
                 '{} vs {}: column "{}" has size "{}" != "{}"'.format(
                     relation_a, relation_b, a_name, a_size, b_size
@@ -1022,32 +928,6 @@ class DBTIntegrationTest(unittest.TestCase):
 
     def rm_file(self, src) -> None:
         os.remove(os.path.join(self.test_root_dir, src))
-
-
-def use_profile(profile_name):
-    """A decorator to declare a test method as using a particular profile.
-    Handles both setting the nose attr and calling self.use_profile.
-
-    Use like this:
-
-    class TestSomething(DBIntegrationTest):
-        @use_profile('postgres')
-        def test_postgres_thing(self):
-            self.assertEqual(self.adapter_type, 'postgres')
-
-        @use_profile('snowflake')
-        def test_snowflake_thing(self):
-            self.assertEqual(self.adapter_type, 'snowflake')
-    """
-    def outer(wrapped):
-        @getattr(pytest.mark, 'profile_'+profile_name)
-        @wraps(wrapped)
-        def func(self, *args, **kwargs):
-            return wrapped(self, *args, **kwargs)
-        # sanity check at import time
-        assert _profile_from_test_name(wrapped.__name__) == profile_name
-        return func
-    return outer
 
 
 class AnyFloat:
