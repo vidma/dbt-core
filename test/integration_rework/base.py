@@ -130,9 +130,6 @@ class DBTIntegrationTest(unittest.TestCase):
     prefix = f'test{_runtime}{_randint:04}'
     setup_alternate_db = False
 
-    @property
-    def database_host(self):
-        return os.getenv('POSTGRES_TEST_HOST', 'localhost')
 
     # this would need to be defined per adapter still
     def postgres_profile(self):
@@ -145,7 +142,7 @@ class DBTIntegrationTest(unittest.TestCase):
                     'default2': {
                         'type': 'postgres',
                         'threads': 4,
-                        'host': self.database_host,
+                        'host': os.getenv('POSTGRES_TEST_HOST', 'localhost'),
                         'port': int(os.getenv('POSTGRES_TEST_PORT', 5432)),
                         'user': os.getenv('POSTGRES_TEST_USER', 'root'),
                         'pass': os.getenv('POSTGRES_TEST_PASS', 'password'),
@@ -155,7 +152,7 @@ class DBTIntegrationTest(unittest.TestCase):
                     'noaccess': {
                         'type': 'postgres',
                         'threads': 4,
-                        'host': self.database_host,
+                        'host': os.getenv('POSTGRES_TEST_HOST', 'localhost'),
                         'port': int(os.getenv('POSTGRES_TEST_PORT', 5432)),
                         'user': 'noaccess',
                         'pass': 'password',
