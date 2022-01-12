@@ -88,6 +88,23 @@ class TestArgs:
         self.__dict__.update(kwargs)
 
 
+def _profile_from_test_name(test_name):
+    adapter_names = ('postgres', 'presto')
+    adapters_in_name = sum(x in test_name for x in adapter_names)
+    if adapters_in_name != 1:
+        raise ValueError(
+            'test names must have exactly 1 profile choice embedded, {} has {}'
+            .format(test_name, adapters_in_name)
+        )
+
+    for adapter_name in adapter_names:
+        if adapter_name in test_name:
+            return adapter_name
+
+    raise ValueError(
+        'could not find adapter name in test name {}'.format(test_name)
+    )
+
 
 def _pytest_test_name():
     return os.environ['PYTEST_CURRENT_TEST'].split()[0]
@@ -194,6 +211,9 @@ class DBTIntegrationTest(unittest.TestCase):
         else:
             raise ValueError('invalid adapter type {}'.format(adapter_type))
 
+    def _pick_profile(self):
+        test_name = self.id().split('.')[-1]
+        return _profile_from_test_name(test_name)
 
     @property
     def test_root_realpath(self):
@@ -244,7 +264,7 @@ class DBTIntegrationTest(unittest.TestCase):
         reset_deprecations()
         template_cache.clear()
 
-        self.use_profile()
+        self.use_profile(self._pick_profile())
         self.use_default_project()
         self.set_packages()
         self.set_selectors()
@@ -274,9 +294,8 @@ class DBTIntegrationTest(unittest.TestCase):
         with open("dbt_project.yml", 'w') as f:
             yaml.safe_dump(project_config, f, default_flow_style=True)
 
-    def use_profile(self):
-        # pretty sure there's a cleaner way of this
-        self.adapter_type = self.test__simple_copy.pytestmark[0].kwargs['profile']
+    def use_profile(self, adapter_type):
+        self.adapter_type = adapter_type
 
         profile_config = {}
         default_profile_config = self.get_profile(self.adapter_type)
@@ -924,6 +943,32 @@ class DBTIntegrationTest(unittest.TestCase):
 
     def rm_file(self, src) -> None:
         os.remove(os.path.join(self.test_root_dir, src))
+
+
+def use_profile(profile_name):
+    """A decorator to declare a test method as using a particular profile.
+    Handles both setting the nose attr and calling self.use_profile.
+
+    Use like this:
+
+    class TestSomething(DBIntegrationTest):
+        @use_profile('postgres')
+        def test_postgres_thing(self):
+            self.assertEqual(self.adapter_type, 'postgres')
+
+        @use_profile('snowflake')
+        def test_snowflake_thing(self):
+            self.assertEqual(self.adapter_type, 'snowflake')
+    """
+    def outer(wrapped):
+        @getattr(pytest.mark, 'profile_'+profile_name)
+        @wraps(wrapped)
+        def func(self, *args, **kwargs):
+            return wrapped(self, *args, **kwargs)
+        # sanity check at import time
+        assert _profile_from_test_name(wrapped.__name__) == profile_name
+        return func
+    return outer
 
 
 class AnyFloat:

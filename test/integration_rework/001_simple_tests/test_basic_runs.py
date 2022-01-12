@@ -2,7 +2,7 @@ import json
 import os
 import pytest
 
-from test.integration_rework.base import DBTIntegrationTest
+from test.integration_rework.base import DBTIntegrationTest, use_profile
 
 
 class BaseTestSimpleCopy(DBTIntegrationTest):
@@ -28,6 +28,9 @@ class BaseTestSimpleCopy(DBTIntegrationTest):
     
 
 class TestSimpleCopy(BaseTestSimpleCopy):
+    # @pytest.fixture(scope="function", autouse=True)
+    # def init(self, record_testsuite_property):
+    #     record_testsuite_property("schema", "simple_copy_001")
 
     def base_setup(self):
         self.seed_data_dict = self.seed_data()
@@ -170,8 +173,8 @@ class TestSimpleCopy(BaseTestSimpleCopy):
 
         return model
     # tests updating seed data. and ref of a seed.  don't know what this has to do with copy.
-    @pytest.mark.use_profile.with_args(profile="postgres")
-    def test__simple_copy(self):
+    @use_profile("postgres")
+    def test__postgres__simple_copy(self):
         self.base_setup()
         results = self.run_dbt(["seed"])
         self.assertEqual(len(results),  1)
@@ -189,8 +192,8 @@ class TestSimpleCopy(BaseTestSimpleCopy):
         self.assertManyTablesEqual(["seed", "view_model", "incremental", "materialized", "get_and_ref"])
 
     # tests that there can be random other tables/views?? look at this again when it's not friday.
-    @pytest.mark.use_profile.with_args(profile="postgres")
-    def test__simple_copy_with_materialized_views(self):
+    @use_profile("postgres")
+    def test__postgres__simple_copy_with_materialized_views(self):
         self.run_sql('''
             create table {schema}.unrelated_table (id int)
         '''.format(schema=self.unique_schema())
@@ -212,8 +215,8 @@ class TestSimpleCopy(BaseTestSimpleCopy):
         self.assertEqual(len(results),  7)
 
     #  tests what the title says!
-    @pytest.mark.use_profile.with_args(profile="postgres")
-    def test__dbt_doesnt_run_empty_models(self):
+    @use_profile("postgres")
+    def test__postgres__dbt_doesnt_run_empty_models(self):
         self.base_setup()
 
         results = self.run_dbt(["seed"])
