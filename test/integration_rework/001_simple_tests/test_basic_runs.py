@@ -28,9 +28,6 @@ class BaseTestSimpleCopy(DBTIntegrationTest):
     
 
 class TestSimpleCopy(BaseTestSimpleCopy):
-    # @pytest.fixture(scope="function", autouse=True)
-    # def init(self, record_testsuite_property):
-    #     record_testsuite_property("schema", "simple_copy_001")
 
     def base_setup(self):
         self.seed_data_dict = self.seed_data()
