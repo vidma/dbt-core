@@ -23,9 +23,7 @@ if "sdist" not in sys.argv:
     print("")
     print("**For the previous behavior of `pip install dbt`:**")
     print("")
-    print(
-        "    pip install dbt-core dbt-postgres dbt-redshift dbt-snowflake dbt-bigquery"
-    )
+    print("    pip install dbt-core dbt-postgres dbt-redshift dbt-snowflake dbt-bigquery")
     print("")
     sys.exit(1)
 
@@ -42,10 +40,7 @@ try:
 except ImportError:
     # the user has a downlevel version of setuptools.
     print("Error: dbt requires setuptools v40.1.0 or higher.")
-    print(
-        'Please upgrade setuptools with "pip install --upgrade setuptools" '
-        "and try again"
-    )
+    print('Please upgrade setuptools with "pip install --upgrade setuptools" ' "and try again")
     sys.exit(1)
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
