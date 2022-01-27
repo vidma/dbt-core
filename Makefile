@@ -9,6 +9,7 @@ endif
 .PHONY: dev
 dev: ## Installs dbt-* packages in develop mode along with development dependencies.
 	pip install -r dev-requirements.txt -r editable-requirements.txt
+	pre-commit install
 
 .PHONY: mypy
 mypy: .env ## Runs mypy for static type checking.
@@ -85,4 +86,3 @@ help: ## Show this help message.
 	@echo
 	@echo 'options:'
 	@echo 'use USE_DOCKER=true to run target in a docker container'
-
