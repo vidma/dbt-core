@@ -35,10 +35,6 @@ if sys.version_info < (3, 7):
     print("Please upgrade to Python 3.7 or higher.")
     sys.exit(1)
 
-printz(
-    "a veeeerrrrrry verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very verry very very long line"
-)
-
 from setuptools import setup
 
 try:
