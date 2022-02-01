@@ -1,3 +1,6 @@
+# Configuration for pre-commit hooks (see https://pre-commit.com/).
+# Eventually the hooks described here will be run as tests before merging each PR.
+
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v3.2.0
