@@ -11,17 +11,23 @@ dev: ## Installs dbt-* packages in develop mode along with development dependenc
 	pip install -r dev-requirements.txt -r editable-requirements.txt
 	pre-commit install
 
-.PHONY: mypy
-mypy: .env ## Runs mypy for static type checking.
-	$(DOCKER_CMD) tox -e mypy
+#.PHONY: mypy
+#mypy: .env ## Runs mypy for static type checking.
+#	$(DOCKER_CMD) tox -e mypy
 
-.PHONY: flake8
-flake8: .env ## Runs flake8 to enforce style guide.
-	$(DOCKER_CMD) tox -e flake8
+#.PHONY: flake8
+#flake8: .env ## Runs flake8 to enforce style guide.
+#	$(DOCKER_CMD) tox -e flake8
+
+#.PHONY: lint
+#lint: .env ## Runs all code checks in parallel.
+#	$(DOCKER_CMD) tox -p -e flake8,mypy
 
 .PHONY: lint
 lint: .env ## Runs all code checks in parallel.
-	$(DOCKER_CMD) tox -p -e flake8,mypy
+	$(DOCKER_CMD) pre-commit run flake8
+	$(DOCKER_CMD) pre-commit run mypy
+	$(DOCKER_CMD) pre-commit run black
 
 .PHONY: unit
 unit: .env ## Runs unit tests with py38.
@@ -29,7 +35,9 @@ unit: .env ## Runs unit tests with py38.
 
 .PHONY: test
 test: .env ## Runs unit tests with py38 and code checks in parallel.
-	$(DOCKER_CMD) tox -p -e py38,flake8,mypy
+	$(DOCKER_CMD) tox -p -e py38
+	$(DOCKER_CMD) pre-commit run flake8
+	$(DOCKER_CMD) pre-commit run mypy
 
 .PHONY: integration
 integration: .env integration-postgres ## Alias for integration-postgres.
