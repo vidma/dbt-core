@@ -3,7 +3,7 @@
 The deps module is responsible for installing dbt packages into dbt projects.  A dbt pakage is a standalone dbt project with models and macros that solve a specific problem area.  More specific information on dbt packages is available on the [docs site](https://docs.getdbt.com/docs/building-a-dbt-project/package-management).
 
 
-# Allowed Deps Sources
+# What's a package?
 
 See [How do I specify a package?](https://docs.getdbt.com/docs/building-a-dbt-project/package-management#how-do-i-specify-a-package) on the docs site for a detailed explination of the different types of packages supported and expected formats.
 
@@ -32,4 +32,4 @@ Extends `PinnedPackage` and `UnpinnedPackage` specific to dbt packages defined o
 
 ## `resolver.py`
 
-Resolves the package definition into 
+Resolves the package definition into package objects to download.
