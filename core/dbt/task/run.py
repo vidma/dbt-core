@@ -250,11 +250,100 @@ class ModelRunner(CompileRunner):
         )
         raise CompilationException(msg, node=model)
 
+    def init_kensu(
+            self,
+            project,
+            app_name,
+            code_version,
+            codebase_location,
+            run_environment,
+            user_name='User FIXME',  # FIXME
+    ):
+        #from kensu.google.cloud import bigquery
+        from kensu.utils.kensu_provider import KensuProvider
+        import urllib3
+        urllib3.disable_warnings()
+
+        import logging
+        import sys
+        log_format = '%(asctime)s %(levelname)s %(filename)s:%(lineno)d %(message)s'
+        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=log_format)
+
+        api_url = 'http://localhost:9066'
+        token = ''
+        offline = True
+        dam = KensuProvider().initKensu(api_url=api_url,
+                                        auth_token=token,
+                                        process_name=app_name,
+                                        user_name=user_name,
+                                        code_location=codebase_location,
+                                        init_context=True,
+                                        allow_reinit=True,
+                                        do_report=True,
+                                        project_names=[project],
+                                        pandas_support=False,
+                                        sklearn_support=False,
+                                        bigquery_support=True,
+                                        mapping=True,
+                                        report_in_mem=False,
+                                        report_to_file=offline,
+                                        offline_file_name='kensu_events.log', # FIXME
+                                        get_explicit_code_version_fn=lambda: code_version,
+                                        environment=run_environment
+                                        )
+
     def execute(self, model, manifest):
         context = generate_runtime_model_context(
             model, self.config, manifest
         )
+        from pprint import pprint
+        # FIXME: make env info extraction configurable via callback/fn
+        print('Kensu: in ModelRunner.execute(self, model, manifest)')
+        #pprint(context)
+        print(context['project_name']) # kensu_samples
+        print(context['run_started_at']) # 2022-02-07 14:26:55.592668+00:00
+        print('invocation_id:' + context['invocation_id']) # '6e607adb-0c0c-47f0-8921-db0594b6a8d3'
+        print(context['source'].config.version)  # FIXME: or context['ref']
+        print('target:' + context['target']['name']) # dev: FIXME: looks like environment?
+        # FIXME: what is target_name/target_path
+        # model has checksum, but only that single one?
+        kmodel = context['model'] or {}
+        kensu_project = kmodel['package_name']
+        # P.S. we also know the target/output DB name & schema
+        # kmodel['relation_name']
+        # kmodel['schema']
+        # kmodel['depends_on'] - models & macros
 
+        print(kensu_project)
+        # One way would be to explicitly provide PROJECT NAME, and use DBT project as Kensu App
+        # ---
+        ## Another way of structuring stuff: APP = model/something.sql
+        # but this would be at lower granularity
+        # 'original_file_path': 'models/example/my_first_dbt_model.sql',
+        #                                                                 'package_name': 'kensu_samples',
+        #                                                                 'patch_path': 'kensu_samples://models/example/schema.yml',
+        #                                                                 'path': 'example/my_first_dbt_model.sql',
+
+
+        # e.g.
+        # model.file_id
+        # Out[1]: 'kensu_samples://models/example/my_first_dbt_model.sql'
+        # model.identifier
+        # Out[2]: 'my_first_dbt_model'
+        # model.unique_id
+        # Out[3]: 'model.kensu_samples.my_first_dbt_model'
+        # FIXME: single model here, maybe we want init once somewhere before...
+        project_version=context['source'].config.version
+        file_checksum = f"checksum={model.checksum.checksum[:8]} ({model.checksum.name})"
+        self.init_kensu(
+            project=kensu_project,
+            app_name=model.unique_id,
+            code_version=f"v{project_version} model #{file_checksum}",
+            codebase_location=model.file_id, # or should it be the project itself, as numeric version is attached there...
+            run_environment=context['target']['name'],
+            user_name='User FIXME',  # FIXME
+            # FIXME: explicit run id?
+        )
         materialization_macro = manifest.find_materialization_macro_by_name(
             self.config.project_name,
             model.get_materialization(),
